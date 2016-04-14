@@ -1,0 +1,135 @@
+#!/bin/bash 
+
+yum -y install wget gcc-c++ ncurses ncurses-devel cmake make perl bison openssl openssl-devel gcc* libxml2 libxml2-devel curl-devel libjpeg* libpng* freetype*
+
+#MySQL install
+cd /usr/local/src
+wget -q http://downloads.mysql.com/archives/get/file/mysql-5.5.33.tar.gz
+
+##############################################################################################
+
+my.cnf:
+[client]
+port            = 3306
+socket          = /tmp/mysql.sock
+character-set-server = utf8mb4
+
+[mysqld]
+port            = 3306
+socket          = /tmp/mysql.sock
+character-set-client-handshake = FALSE
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+init_connect='SET NAMES utf8mb4'
+
+# MyISAM #
+key-buffer-size                = 1G
+myisam-recover-options         = FORCE,BACKUP
+
+# SAFETY #
+max-allowed-packet             = 128M
+#max-connect-errors             = 1000000
+
+# DATA STORAGE #
+datadir                        = /data/mysql/var_master
+
+# BINARY LOGGING #
+log-bin                        = mysql-bin
+expire-logs-days               = 7
+sync-binlog                    = 0
+
+# CACHES AND LIMITS #
+tmp-table-size                 = 32M
+max-heap-table-size            = 32M
+query-cache-type               = 0
+query-cache-size               = 0
+max-connections                = 500
+thread-cache-size              = 50
+open-files-limit               = 65535
+table-definition-cache         = 1024
+table-open-cache               = 2048
+
+# INNODB #
+innodb-log-files-in-group      = 3
+innodb-log-file-size           = 256M
+innodb-flush-log-at-trx-commit = 1
+innodb-buffer-pool-size        = 500M
+
+# LOGGING #
+log-queries-not-using-indexes  = 1
+slow-query-log                 = 1
+slow-query-log-file            = mysql-slow.log
+
+server-id = 1
+
+[mysqldump]
+quick
+max_allowed_packet = 128M
+
+[mysql]
+no-auto-rehash
+character-set-server = utf8mb4
+
+
+[myisamchk]
+key_buffer_size = 512M
+sort_buffer_size = 512M
+read_buffer = 8M
+write_buffer = 8M
+
+[mysqlhotcopy]
+interactive-timeout
+
+[mysqld_safe]
+open-files-limit = 8192
+character-set-server = utf8mb4
+
+##############################################################################################
+
+useradd -M mysql -s /sbin/nologin
+tar zxf mysql-5.5.33.tar.gz 
+cd mysql-5.5.33
+cmake . -DCMAKE_INSTALL_PREFIX=/usr/local/mysql -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_bin -DWITH_EXTRA_CHARSETS=all
+make -j 8 && make -j 8 install
+mkdir -p /usr/local/mysql/etc/    #=====> 将mysql.cnf放在该路径下，存放mysql的配置文件
+mkdir -p /data/mysql/var_master
+chmod 755 scripts/mysql_install_db  
+./scripts/mysql_install_db --defaults-file=/usr/local/mysql/etc/master.cnf --basedir=/usr/local/mysql/ --datadir=/data/mysql/var_master/
+chown -R mysql.mysql /data/mysql/var_master/
+/usr/local/mysql/bin/mysqld_safe --defaults-file=/usr/local/mysql/etc/master.cnf --user=mysql &
+#启动完毕后进入mysql 修改root密码
+
+
+#Apache install
+cd /usr/local/src
+wget -q http://netassist.dl.sourceforge.net/project/pcre/pcre/8.32/pcre-8.32.tar.gz
+tar zxf pcre-8.32.tar.gz
+cd pcre-8.32
+ ./configure --prefix=/usr/local/pcre
+ make -j 8 && make -j 8 install
+
+wget http://archive.apache.org/dist/httpd/httpd-2.4.3-deps.tar.bz2
+wget http://archive.apache.org/dist/httpd/httpd-2.4.4.tar.bz2
+tar jxf httpd-2.4.4.tar.bz2
+tar jxf httpd-2.4.3-deps.tar.bz2
+cp -af httpd-2.4.3/* httpd-2.4.4
+cd httpd-2.4.4
+./configure --prefix=/usr/local/apache2 --enable-so --enable-rewrite --with-pcre=/usr/local/pcre/bin/pcre-config
+make -j 8 && make -j 8 install
+#修改配置文件
+#<Directory />
+#    AllowOverride none
+#    Require all denied
+#    Allow from all  ====> 添加此行
+#</Directory>
+/usr/local/apache2/bin/apachectl start 
+
+#PHP install
+cd /usr/local/src
+wget http://museum.php.net/php5/php-5.4.13.tar.bz2
+tar jxf php-5.4.13.tar.bz2
+cd php-5.4.13
+./configure --prefix=/usr/local/php5 --with-apxs2=/usr/local/apache2/bin/apxs --with-libxml-dir=/usr/local/lib --with-zlib-dir=/usr/local/lib --with-mysql=/usr/local/mysql --with-mysqli=/usr/local/mysql/bin/mysql_config --with-gd --enable-soap --enable-sockets  --enable-xml --enable-mbstring --with-png-dir=/usr/local --with-jpeg-dir=/usr/local --with-curl=/usr/lib --with-freetype-dir=/usr/include/freetype2/freetype/ --enable-bcmath --enable-calendar --enable-zip --enable-maintainer-zts --with-gettext 
+ make -j 8 && make -j 8 install
+cp php.ini-development /usr/local/php5/lib/
+#修改php时区为Asia/Shanghai
